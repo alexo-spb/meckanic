@@ -1,0 +1,7 @@
+{application, meckanic, [
+    {description, "A meck based test helper for Erlang"},
+    {vsn, "0.1"},
+    {modules, [meckanic]},
+    {applications, [kernel, stdlib, meck]},
+    {env, []}
+]}.
