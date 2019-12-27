@@ -42,12 +42,28 @@
     code_change/3
 ]).
 
--type mocked_mod() :: atom().
--type mocked_fun() :: atom().
--type mocked_args() :: [term()].
--type result() :: passthrough | {return, term()} | {exception, throw | error | exit, term()}.
+-type mocked_module() :: atom().
+-type mocked_function() :: atom().
+-type args() :: [term()].
+
 -type state() :: term().
--type handler() :: fun((pid(), mocked_mod(), mocked_fun(), mocked_args(), state()) -> {result(), state()}).
+
+-type result() ::
+    {result, term()} |
+    {result, term(), state()}.
+
+-type passthrough() ::
+    passthrough |
+    {passthrough, state()}.
+
+-type exception() ::
+    {exception, term()} |
+    {exception, throw | error | exit, term()} |
+    {exception, throw | error | exit, term(), state()}.
+
+-type return() :: result() | passthrough() | exception().
+
+-type handler() :: fun((pid(), mocked_module(), mocked_function(), args(), state()) -> return()).
 
 -record(state, {
     handler :: handler(),
@@ -90,8 +106,22 @@ handle_call({detach, Module}, _From, State) ->
     {reply, Reply, State};
 handle_call({handle_mocked_call, Pid, Module, Function, Args}, _From, State) ->
     #state{handler = Handler, state = State0} = State,
-    {Reply, State1} = Handler(Pid, Module, Function, Args, State0),
-    {reply, Reply, State#state{state = State1}};
+    case Handler(Pid, Module, Function, Args, State0) of
+        passthrough ->
+            {reply, passthrough, State};
+        {passthrough, State1} ->
+            {reply, passthrough, State#state{state = State1}};
+        {result, Result} ->
+            {reply, {result, Result}, State};
+        {result, Result, State1} ->
+            {reply, {result, Result}, State#state{state = State1}};
+        {exception, Reason} ->
+            {reply, {exception, throw, Reason}, State};
+        {exception, Class, Reason} ->
+            {reply, {exception, Class, Reason}, State};
+        {exception, Class, Reason, State1} ->
+            {reply, {exception, Class, Reason}, State#state{state = State1}}
+    end;
 handle_call(stop, _From, State) ->
     {stop, normal, ok, State};
 handle_call(_Request, _From, State) ->
@@ -212,10 +242,10 @@ make_mocking_fun(Pid, M, F, 16) ->
 
 handle_mocked_call(Pid, Mod, Fun, Args) ->
     case gen_server:call(Pid, {handle_mocked_call, self(), Mod, Fun, Args}) of
-        {return, Result} ->
-            Result;
         passthrough ->
             meck:passthrough(Args);
+        {result, Result} ->
+            Result;
         {exception, Class, Reason} ->
             meck:exception(Class, Reason)
     end.
