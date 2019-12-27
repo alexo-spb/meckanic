@@ -29,6 +29,7 @@
     start_link/3,
     stop/1,
     attach/2,
+    detach/1,
     detach/2
 ]).
 
@@ -92,6 +93,9 @@ stop(Name) ->
 attach(Name, Module) ->
     gen_server:call(Name, {attach, Module}).
 
+detach(Name) ->
+    gen_server:call(Name, detach).
+
 detach(Name, Module) ->
     gen_server:call(Name, {detach, Module}).
 
@@ -100,6 +104,9 @@ init([Handler, State]) ->
 
 handle_call({attach, Module}, _From, State) ->
     Reply = mock_module(Module),
+    {reply, Reply, State};
+handle_call(detach, _From, State) ->
+    Reply = meck:unload(),
     {reply, Reply, State};
 handle_call({detach, Module}, _From, State) ->
     Reply = meck:unload(Module),
